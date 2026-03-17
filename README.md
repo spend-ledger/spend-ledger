@@ -57,6 +57,7 @@ Or use the CLI directly:
 ```
 agent-budget/
 ├── SKILL.md              # Agent-facing instructions (what the LLM reads)
+├── README.md             # This file
 ├── TECHNICAL.md          # Architecture, security model, data model
 ├── server/
 │   ├── transactions.js   # Append, query, summarize, hash chain, export
