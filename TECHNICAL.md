@@ -51,7 +51,7 @@ spend-ledger is designed to need as little access as possible:
 |---|---|---|
 | Read tool call results | Yes | Core function — detecting payments |
 | Write to its own data directory | Yes | Transaction log, tracked tools, submissions |
-| Network access (outbound) | Fetch only | Fetches `api.spend-ledger.net/patterns.json` daily — no payment data included |
+| Network access (outbound) | Fetch only | Fetches `api.spend-ledger.com/patterns.json` daily — no payment data included |
 | Network access (inbound) | Localhost only | Dashboard server binds to `127.0.0.1`, never `0.0.0.0` |
 | Wallet keys or credentials | **No** | Observes results, never initiates payments |
 | Shell execution (exec) | **No** | Shell scripts are tools the agent calls, not the skill itself |
@@ -149,9 +149,9 @@ Users can add custom tool patterns via the dashboard's "Track Tools" tab or the 
 
 ### Community Patterns
 
-On startup and every hour, the skill fetches `api.spend-ledger.net/patterns.json` and caches it to `data/community-patterns.json`. `detectUserTracked()` merges local and community patterns at detection time — local patterns take priority on any conflict. This allows the published pattern list to expand without requiring a skill update.
+On startup and every hour, the skill fetches `api.spend-ledger.com/patterns.json` and caches it to `data/community-patterns.json`. `detectUserTracked()` merges local and community patterns at detection time — local patterns take priority on any conflict. This allows the published pattern list to expand without requiring a skill update.
 
-Community patterns are maintained at [github.com/mattpolly/spend-ledger.net](https://github.com/mattpolly/spend-ledger.net). The fetch is read-only; no payment data or transaction records are included in any request to that host. The only outbound write is an opt-in pattern submission from the dashboard (`data/submissions.jsonl` records what was sent locally).
+Community patterns are submitted to `api.spend-ledger.com/patterns` and served from `api.spend-ledger.com/patterns.json`. The fetch is read-only; no payment data or transaction records are included in any request to that host. The only outbound write is an opt-in pattern submission from the dashboard (`data/submissions.jsonl` records what was sent locally).
 
 ### Detection Confidence
 
