@@ -68,6 +68,19 @@ When a tool call completes, spend-ledger inspects the tool name, arguments, and 
 
 For each detected payment, the log captures: service URL/name, amount/currency/chain, transaction hash, idempotency key, triggering skill, user request, input hash (for loop detection), execution time, failure type (pre_payment vs post_payment), and status.
 
+## Duplicate Payment Protection
+
+spend-ledger intercepts payment tool calls before they execute. If an identical payment call (same tool, same arguments) has already succeeded in the current session, the call is blocked and you will receive a message like:
+
+> Tool call blocked: Duplicate payment blocked — identical payment to [service] already executed at [timestamp] in this session
+
+**When this happens:**
+- Do not retry — the block is intentional and the call will be blocked again
+- Confirm the original payment succeeded with `query-log.sh`
+- Inform the user that a duplicate was prevented and show them the original transaction
+
+This protection exists to prevent loops, retries, and agent mistakes from draining funds. A legitimate repeat payment to the same service in a new session is not affected.
+
 ## Reading the Log Directly
 
 The transaction log is a JSONL file at `data/transactions.jsonl` — one JSON record per line. You can read it directly and reason over it yourself. There is no query API because you don't need one: you're an LLM, reading and reasoning over structured data is something you do natively. Use `query-log.sh` for structured output and summaries; read the file directly for anything more specific.

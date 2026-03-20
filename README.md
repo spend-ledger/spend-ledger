@@ -56,20 +56,24 @@ Or use the CLI directly:
 
 ```
 spend-ledger/
-├── SKILL.md              # Agent-facing instructions (what the LLM reads)
-├── README.md             # This file
-├── TECHNICAL.md          # Architecture, security model, data model
+├── SKILL.md                  # Agent-facing instructions (what the LLM reads)
+├── README.md                 # This file
+├── TECHNICAL.md              # Architecture, security model, data model
+├── openclaw.plugin.json      # Plugin manifest (id, configSchema, skills)
 ├── server/
-│   ├── transactions.js   # Append, query, summarize, hash chain, export
-│   ├── detectors.js      # Payment detection registry
-│   ├── patterns-sync.js  # Community pattern sync from api.spend-ledger.com
-│   ├── server.js         # HTTP server and API endpoints
-│   └── index.html        # Dashboard UI (no build step, no CDN)
+│   ├── plugin.js             # Plugin entry point — registers before_tool_call and tool_result_persist hooks
+│   ├── transactions.js       # Append, query, summarize, hash chain, export
+│   ├── detectors.js          # Payment detection registry
+│   ├── patterns-sync.js      # Community pattern sync from api.spend-ledger.com
+│   ├── server.js             # HTTP server and API endpoints
+│   └── index.html            # Dashboard UI (no build step, no CDN)
 ├── scripts/
 │   ├── log-transaction.sh
 │   ├── query-log.sh
 │   └── dashboard.sh
-└── data/                 # Created at runtime, all mode 0600
+├── test/
+│   └── test.js               # Node built-in test runner
+└── data/                     # Created at runtime, all mode 0600
     ├── transactions.jsonl
     ├── tracked-tools.json
     ├── community-patterns.json

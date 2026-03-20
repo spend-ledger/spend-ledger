@@ -357,7 +357,7 @@ function truncate(str, maxLen) {
 // --- User-defined tracked tools ---
 
 const SUGGESTIONS_PATH = resolve(
-  process.env.AGENT_BUDGET_SUGGESTIONS ||
+  process.env.SPEND_LEDGER_SUGGESTIONS ||
     new URL("../data/tracked-tools.json", import.meta.url).pathname
 );
 

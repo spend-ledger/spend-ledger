@@ -41,7 +41,7 @@ If anyone modifies, deletes, or reorders a historical record, the chain breaks. 
 - Corruption from partial writes (each line is independently valid JSON; the chain catches if a line was altered after being written)
 
 **What this does NOT protect against:**
-- An attacker with file system access who rewrites the entire log and recomputes all hashes. This is a local file, not a distributed ledger. For v0.1 (observe and report), this is acceptable. v0.4 introduces signed receipts that provide cryptographic non-repudiation.
+- An attacker with file system access who rewrites the entire log and recomputes all hashes. This is a local file, not a distributed ledger. A future version will introduce signed receipts that provide cryptographic non-repudiation.
 
 ### 3. Minimal attack surface
 
@@ -89,11 +89,11 @@ Duplicate payments are a real risk with autonomous agents. Retries, loops, and r
 - **Transaction hash**: If a tx_hash already exists in the log, the new record is rejected
 - **Idempotency key**: If an idempotency_key already exists, the record is rejected
 
-This prevents double-counting in reports. It does NOT prevent the duplicate payment itself (that requires `before_tool_call` enforcement in v0.2), but it ensures the owner's view of spending is accurate.
+This prevents double-counting in reports. The `before_tool_call` hook prevents the duplicate payment itself from executing — deduplication in the log is a second line of defense.
 
 ### Loop Detection
 
-Each transaction records a `context.input_hash` — a SHA-256 hash of the tool arguments. If an agent calls the same expensive service with identical inputs repeatedly, this shows up clearly in the log: multiple records with the same `input_hash`. The dashboard can surface this pattern in future versions, and v0.2 budget controls can use it as a trigger ("alert if the same input_hash appears more than N times in an hour").
+Each transaction records a `context.input_hash` — a SHA-256 hash of the tool arguments. If an agent calls the same expensive service with identical inputs repeatedly, the `before_tool_call` hook detects the repeated `input_hash` and blocks the duplicate before it executes. The dashboard surfaces this pattern so the owner can see where loops occurred.
 
 ### Failure Classification
 
@@ -312,36 +312,32 @@ The server binds to `127.0.0.1`, not `0.0.0.0`. This means:
 
 ## Hook Integration
 
-### Current: tool_result_persist (v0.1)
+Both hooks are registered in `server/plugin.js`, loaded by OpenClaw via the `openclaw.extensions` field in `package.json`. The plugin manifest is `openclaw.plugin.json`.
 
-spend-ledger uses the `tool_result_persist` hook, which fires synchronously after every tool call completes. This hook is available in OpenClaw today and does not require any core changes.
+### tool_result_persist
 
-The hook receives the tool name, arguments, and result. spend-ledger passes these to the detector registry, and if a payment is detected, appends a record to the log.
+Fires synchronously after every tool call completes. spend-ledger passes the tool name, arguments, and result to the detector registry, and if a payment is detected, appends a record to the log. This is the observation layer — it records what happened.
 
-**Limitation**: This hook fires after the tool has already executed. spend-ledger can observe and log, but cannot block or modify the payment. This is by design for v0.1.
+### before_tool_call
 
-### Future: before_tool_call (v0.2)
-
-The `before_tool_call` hook is defined in OpenClaw's `plugins/hooks.js` and exported via `createHookRunner()`, but is not currently wired into the tool execution pipeline. Multiple open issues request this (#5943, #7597, #12311, #30504).
-
-When wired, this hook would allow spend-ledger to:
+Fires before a tool executes, allowing spend-ledger to inspect and block a proposed payment before any money moves. spend-ledger uses this hook to:
+- **Block duplicate payments** — if the same `input_hash` already exists in the log as `confirmed` within the current session, the call is blocked before money moves
 - Check proposed payments against budget limits before they execute
-- Block payments that exceed caps or hit blocklisted services
-- Require human approval for payments above a threshold
-- Pause tool execution and resume after approval
+- Block payments to services on a blocklist
 
-This is the architectural path to v0.2 budget controls.
+Duplicate scoping is intentionally **session-bound**: an agent legitimately calling the same service twice in different sessions is allowed. Only repeated identical payments within the same session are blocked — that's the loop/retry storm pattern we're preventing.
+
+This is the enforcement layer — it prevents bad outcomes rather than just recording them.
 
 ---
 
 ## Design Decisions
 
-### Why observe-only in v0.1?
+### Why two hooks?
 
-1. **Works today** — `tool_result_persist` is available now; `before_tool_call` is not
-2. **Usage data informs controls** — real spending patterns from v0.1 will show what controls are actually needed
-3. **Visibility is independently valuable** — most agent owners don't even know what their agent spends
-4. **Lower risk** — a logging bug loses visibility; an enforcement bug blocks legitimate payments
+1. **Separation of concerns** — `tool_result_persist` records ground truth; `before_tool_call` enforces policy. Keeping them separate means a logging bug never affects enforcement and vice versa.
+2. **Visibility is independently valuable** — the log gives owners a complete picture of what their agent spent, regardless of what was blocked
+3. **Enforcement requires observation** — `before_tool_call` uses data collected by `tool_result_persist` (input hashes, spend totals) to make blocking decisions
 
 ### Why hash chain instead of a database?
 

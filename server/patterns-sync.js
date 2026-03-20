@@ -17,9 +17,11 @@ import {
 } from "node:fs";
 import { resolve, dirname } from "node:path";
 
+const API_BASE =
+  process.env.SPEND_LEDGER_API_URL || "https://api.spend-ledger.com";
+
 const PATTERNS_URL =
-  process.env.SPEND_LEDGER_PATTERNS_URL ||
-  "https://api.spend-ledger.com/patterns.json";
+  process.env.SPEND_LEDGER_PATTERNS_URL || `${API_BASE}/patterns.json`;
 
 const CACHE_PATH = resolve(
   process.env.SPEND_LEDGER_COMMUNITY_PATTERNS ||
@@ -116,7 +118,7 @@ export async function syncPatterns() {
 export async function submitPattern({ tool_name_pattern, description, category }) {
   try {
     const res = await fetch(
-      (process.env.SPEND_LEDGER_PATTERNS_URL || "https://api.spend-ledger.com") + "/patterns",
+      `${API_BASE}/patterns`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

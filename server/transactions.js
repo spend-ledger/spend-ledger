@@ -3,7 +3,7 @@ import { readFileSync, appendFileSync, existsSync, mkdirSync, openSync, closeSyn
 import { dirname, resolve } from "node:path";
 
 const DEFAULT_LOG_PATH = resolve(
-  process.env.AGENT_BUDGET_LOG ||
+  process.env.SPEND_LEDGER_LOG ||
     new URL("../data/transactions.jsonl", import.meta.url).pathname
 );
 

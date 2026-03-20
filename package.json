@@ -1,6 +1,6 @@
 {
   "name": "spend-ledger",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenClaw skill that tracks agent payments and presents them as a reviewable statement",
   "type": "module",
   "scripts": {
@@ -8,5 +8,8 @@
     "test": "node --test test/test.js"
   },
   "keywords": ["openclaw", "skill", "x402", "budget", "payments"],
-  "license": "MIT"
+  "license": "MIT",
+  "openclaw": {
+    "extensions": ["server/plugin.js"]
+  }
 }
