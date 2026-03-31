@@ -165,6 +165,8 @@ export function queryTransactions(filters = {}, logPath = DEFAULT_LOG_PATH) {
   }
   if (filters.to) {
     const to = new Date(filters.to);
+    // Date-only strings parse as midnight UTC; extend to end of that day
+    if (!filters.to.includes("T")) to.setUTCHours(23, 59, 59, 999);
     txns = txns.filter((t) => new Date(t.timestamp) <= to);
   }
   if (filters.service) {

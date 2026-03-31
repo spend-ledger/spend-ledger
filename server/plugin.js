@@ -17,7 +17,7 @@
  * doesn't include them in that event.
  */
 
-import { detectPayment } from "./detectors.js";
+import { detectPayment, hasPaymentArgs } from "./detectors.js";
 import { readAllTransactions, appendTransaction, hashInput } from "./transactions.js";
 import { syncPatterns } from "./patterns-sync.js";
 
@@ -40,8 +40,11 @@ export function register(api) {
     const sessionKey = ctx?.sessionKey ?? null;
 
     // Quick pre-check: is this even a payment tool?
-    // Pass empty result — we only need name/arg signals at this stage.
-    const likelyPayment = detectPayment(toolName, params, "");
+    // Use hasPaymentArgs as a broader stash trigger — detectPayment can't confirm
+    // without a result, but if args look monetary we want to capture them so
+    // tool_result_persist can make a proper decision with the full result.
+    const argsStr = typeof params === "object" ? JSON.stringify(params || {}) : String(params || "");
+    const likelyPayment = detectPayment(toolName, params, "") || hasPaymentArgs(argsStr);
     if (!likelyPayment) return { params };
 
     // Stash params for tool_result_persist to pick up later.

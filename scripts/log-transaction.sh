@@ -35,6 +35,10 @@ fi
 node --input-type=module -e "
 import { appendTransaction } from '${SERVER_DIR}/transactions.js';
 const txn = JSON.parse(process.argv[1]);
+// Normalize status aliases agents commonly produce
+if (txn.status === 'success') txn.status = 'confirmed';
+// Mark as manually logged (same as server API POST)
+txn.source = 'manual';
 const record = appendTransaction(txn);
 console.log(JSON.stringify(record, null, 2));
 " "$JSON"

@@ -116,17 +116,18 @@ Payment detection uses a registry of detector functions, evaluated in priority o
 1. User-tracked tools     — Custom patterns defined by the user (highest priority)
 2. agent-wallet-cli       — Detects x402 subcommand in args
 3. v402                   — Detects v402-pay/v402-http script calls
-4. ClawRouter             — Detects by tool name (requires name match, not just cost/price fields)
+4. ClawRouter             — Detects by tool name
 5. payment-skill          — Detects pay script calls
-6. Heuristic              — Broad pattern matching on tool names and argument shapes
-7. Generic x402           — Catch-all for any x402 payment confirmation in response body
+6. Crypto wallet          — Detects by tool name: solana_transfer, send_usdc, wallet_send, wallet_transfer, etc.
+7. Heuristic              — Broad pattern matching; also detects exec-wrapped payments from result text
+8. Generic x402           — Catch-all for any x402 payment confirmation in response body
 ```
 
 The first detector to return a match wins. This ordering ensures specific, high-confidence detectors fire before broad heuristic ones.
 
 ### Heuristic Detection
 
-The heuristic detector catches payment tools that don't match any specific detector. It uses three signal layers:
+The heuristic detector catches payment tools that don't match any specific detector. It uses four signal layers:
 
 **Tool name matching**: Regex against known payment-related tool names:
 ```
@@ -135,13 +136,15 @@ send_money|donate|checkout|purchase|buy|invoice|subscribe|billing
 ```
 
 **Argument scanning**: Looks for co-occurrence of monetary keywords (`amount`, `price`, `total`, `cost`, `fee`) with at least one of:
-- Currency signals (`currency`, `usd`, `eur`, `usdc`, `btc`)
+- Currency signals (`currency`, `usd`, `eur`, `usdc`, `btc`, `sol`)
 - Recipient signals (`recipient`, `payee`, `wallet_address`, `iban`)
 - Payment method signals (`payment_method`, `card`, `token`, `pm_`)
 
-**Result confirmation**: Checks for success markers (`succeeded`, `completed`, `charged`, `payment confirmed`) and transaction ID patterns (`ch_`, `pi_`, `pm_`, `0x[a-f0-9]{64}`, `txn_`).
+**Result confirmation**: Checks for success markers (`succeeded`, `completed`, `charged`, `payment confirmed`, `transaction confirmed`) and transaction ID patterns (`ch_`, `pi_`, `pm_`, `0x[a-f0-9]{64}`, `txn_`, Solana base58 signatures).
 
-**False positive prevention**: The heuristic detector requires either a tool name match OR (argument signals AND result confirmation AND non-zero amount). A tool that returns price data without actually charging anything will not trigger.
+**Result-only trigger**: The heuristic also checks the *result text itself* for monetary signals — the same argument scanning logic applied to the tool output. This catches exec-wrapped payment scripts where the shell command string (`node pay_vendor.js`) carries no monetary keywords, but the output contains `Amount: 0.5 USDC` and `Transaction confirmed`. In this path, amount and currency are extracted from plain text via regex rather than JSON field lookup.
+
+**False positive prevention**: The heuristic requires a tool name match, OR (arg signals AND result confirmation), OR (result-text monetary signals AND result confirmation). Additionally, a non-zero extracted amount is required unless the tool name matches. A tool that returns price data without a confirmation marker will not trigger.
 
 ### User-Tracked Tools
 
@@ -351,9 +354,15 @@ This is the enforcement layer — it prevents bad outcomes rather than just reco
 
 The dashboard binds to `127.0.0.1`. Only processes on the local machine can reach it. Adding authentication would add complexity without adding security — if an attacker is running code on your machine, they can read the JSONL file directly regardless of dashboard auth.
 
-### Why copy-install instead of symlink?
+### Plugin registration
 
-OpenClaw's `resolveContainedSkillPath` resolves symlinks and rejects paths that escape the skills directory root. This is a security feature — it prevents a skill from symlinking to arbitrary file system locations. spend-ledger respects this by requiring a copy installation.
+spend-ledger registers as an OpenClaw plugin via `plugins.load.paths` in `openclaw.json`, populated by running:
+
+```bash
+openclaw plugins install -l ~/.openclaw/skills/spend-ledger
+```
+
+The `-l` flag links the directory in place (no copy). The plugin entry point (`server/plugin.js`) is loaded by OpenClaw via jiti when the gateway starts. Note that OpenClaw's `resolveContainedSkillPath` symlink restriction applies to file access *within* a skill's sandbox, not to the plugin code loading path — the two systems are separate.
 
 ---
 

@@ -275,6 +275,51 @@ function detectGenericX402(toolName, toolArgs, toolResult) {
   };
 }
 
+const CRYPTO_WALLET_TOOL_NAMES =
+  /\b(solana_transfer|sol_transfer|send_usdc|send_sol|transfer_token|transfer_spl|crypto_send|wallet_send|wallet_transfer|send_transaction|transfer_funds)\b/i;
+
+function detectCryptoWallet(toolName, toolArgs, toolResult) {
+  if (!CRYPTO_WALLET_TOOL_NAMES.test(toolName)) return null;
+
+  const result = tryParseJSON(toolResult) || {};
+  const argsStr = toStr(toolArgs);
+  const args = typeof toolArgs === "object" ? toolArgs : tryParseJSON(argsStr) || {};
+  const common = extractCommonFields(argsStr, result);
+
+  // Prefer amount from args when result doesn't carry it (common for wallet tools)
+  let amountVal = common.amount !== "0" ? common.amount
+    : String(dig(args, "amount") || dig(args, "value") || dig(args, "lamports") || "0");
+
+  // Convert lamports → SOL if no explicit currency and value looks like lamports
+  const currency = String(dig(args, "currency") || dig(args, "token") || dig(args, "mint") || common.currency);
+  if (parseFloat(amountVal) > 1_000_000 && /unknown|sol/i.test(currency) && !dig(args, "currency")) {
+    amountVal = String(parseFloat(amountVal) / 1e9);
+  }
+
+  // Recipient address for service name
+  const recipient = String(dig(args, "to") || dig(args, "recipient") || dig(args, "destination") || "");
+  const shortRecipient = recipient.length > 8 ? `${recipient.slice(0, 4)}…${recipient.slice(-4)}` : recipient;
+
+  return {
+    service: {
+      url: common.url,
+      name: shortRecipient || "crypto-wallet",
+      category: "crypto",
+    },
+    amount: {
+      value: amountVal,
+      currency: currency || "SOL",
+      chain: common.chain || "solana",
+    },
+    tx_hash: common.txHash,
+    idempotency_key: common.idempotencyKey,
+    tool_name: toolName,
+    tool_args_summary: truncate(argsStr, 200),
+    status: common.status,
+    failure_type: common.failureType,
+  };
+}
+
 /**
  * Heuristic detector: catches common payment tool names and argument patterns
  * that don't match any specific detector above. Fires last before the catch-all.
@@ -283,11 +328,15 @@ const PAYMENT_TOOL_NAMES =
   /\b(stripe|paypal|venmo|square|shopify|braintree|crypto_transfer|send_money|donate|checkout|purchase|buy|invoice|subscribe|billing)\b/i;
 
 const PAYMENT_RESULT_MARKERS =
-  /\b(succeeded|completed|charged|payment.confirmed|transaction.id|txid|receipt)\b/i;
+  /\b(succeeded|completed|charged|payment.confirmed|transaction.id|txid|receipt|transaction\s+confirmed|payment\s+confirmed)\b/i;
 
-// Common transaction ID patterns
+// Common transaction ID patterns — includes Solana base58 signatures (87-88 chars)
 const TX_ID_PATTERNS =
-  /\b(ch_[a-z0-9]{20,}|pi_[a-z0-9]{20,}|pm_[a-z0-9]{20,}|paypal_tx_\w+|0x[a-f0-9]{64}|txn_[a-z0-9]+)\b/i;
+  /\b(ch_[a-z0-9]{20,}|pi_[a-z0-9]{20,}|pm_[a-z0-9]{20,}|paypal_tx_\w+|0x[a-f0-9]{64}|txn_[a-z0-9]+|[1-9A-HJ-NP-Za-km-z]{87,88})\b/;
+
+// Amount + currency extracted from plain text like "Amount: 0.5 USDC" or "Sent 1.2 ETH"
+const PLAIN_TEXT_AMOUNT =
+  /(?:amount|sent|sending|transferred?|paid?|payment(?:\s+of)?)[\s:]*([0-9]+(?:\.[0-9]+)?)\s*([A-Z]{2,6})\b/i;
 
 function detectHeuristic(toolName, toolArgs, toolResult) {
   const argsStr = toStr(toolArgs);
@@ -296,12 +345,23 @@ function detectHeuristic(toolName, toolArgs, toolResult) {
   const nameMatch = PAYMENT_TOOL_NAMES.test(toolName);
   const argsMatch = hasPaymentArgs(argsStr);
   const resultMatch = PAYMENT_RESULT_MARKERS.test(resultStr);
+  // Also check result for monetary signals (handles exec-wrapped payment scripts)
+  const resultHasPaymentSignals = hasPaymentArgs(resultStr);
 
-  // Need at least tool name match, or (args look like payment AND result confirms it)
-  if (!nameMatch && !(argsMatch && resultMatch)) return null;
+  // Match if: named payment tool, OR args+result confirm, OR result alone is conclusive
+  if (!nameMatch && !(argsMatch && resultMatch) && !(resultHasPaymentSignals && resultMatch)) return null;
 
   const result = tryParseJSON(toolResult) || {};
   const common = extractCommonFields(argsStr, result);
+
+  // For non-JSON results, extract amount/currency from plain text
+  if (common.amount === "0") {
+    const textMatch = PLAIN_TEXT_AMOUNT.exec(resultStr) || PLAIN_TEXT_AMOUNT.exec(argsStr);
+    if (textMatch) {
+      common.amount = textMatch[1];
+      common.currency = textMatch[2].toUpperCase();
+    }
+  }
 
   // For heuristic matches, require a non-zero amount to avoid false positives
   // (e.g., a price lookup API that returns prices without charging)
@@ -434,6 +494,7 @@ const detectors = [
   detectV402,
   detectClawRouter,
   detectPaymentSkill,
+  detectCryptoWallet,   // Solana / crypto wallet tools
   detectHeuristic,      // Broad heuristic before generic x402
   detectGenericX402,    // Catch-all last
 ];

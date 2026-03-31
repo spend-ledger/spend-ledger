@@ -13,7 +13,7 @@ You have access to an agent spending tracker. Payments made through any tool —
 
 ### log-transaction.sh
 
-Manually log a payment transaction. Use when automatic detection missed a payment or for recording manual expenditures. Duplicates (same tx_hash or idempotency_key) are rejected.
+Manually log a payment transaction. **Do not call this during or immediately after a payment** — the hook detects payments automatically, and calling this first blocks the hook from creating the richer auto record. Only use this if you check `query-log.sh` and confirm no record was created for a transaction that just completed. Also valid for recording manual expenditures the agent didn't make. Duplicates (same tx_hash or idempotency_key) are rejected.
 
 ```bash
 # Preferred: pipe JSON via stdin to avoid shell escaping issues
@@ -61,7 +61,8 @@ dashboard.sh url      # Print dashboard URL
 When a tool call completes, spend-ledger inspects the tool name, arguments, and result to determine if a payment occurred. Detection covers:
 
 - **Known payment tools**: agent-wallet-cli, v402, ClawRouter, payment-skill, Stripe, PayPal, and other common payment APIs
-- **Heuristic detection**: tools named `stripe_*`, `paypal_*`, `checkout`, `purchase`, `buy`, etc., plus argument patterns containing monetary amounts with currency/recipient signals — logged as `status: "unverified"` since there is no formal payment signal; the owner should review these
+- **Crypto wallet tools**: `solana_transfer`, `send_usdc`, `wallet_send`, `wallet_transfer`, `transfer_token`, and similar — detected by tool name; amount, recipient, and transaction hash extracted from args and result
+- **Heuristic detection**: tools named `stripe_*`, `paypal_*`, `checkout`, `purchase`, `buy`, etc., plus argument patterns containing monetary amounts with currency/recipient signals. Also detects exec-wrapped payment scripts — if an exec result contains monetary signals ("Amount: 0.5 USDC") and a confirmation marker ("Transaction confirmed"), it is logged. These are logged as `status: "unverified"` since there is no formal payment signal; the owner should review these
 - **Generic x402**: any tool response containing `X-PAYMENT-RESPONSE` headers or x402 payment confirmations
 - **User-tracked tools**: custom patterns added by the user via the dashboard; optionally submitted to maintainers for inclusion in the community list
 - **Community patterns**: curated tool patterns fetched from `api.spend-ledger.com/patterns.json` and refreshed daily — expands detection coverage automatically as new payment tools are discovered by the community
